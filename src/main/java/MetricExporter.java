@@ -11,7 +11,7 @@ import java.util.Map;
 
 class MetricExporter {
 
-    private static CollectorRegistry registry = new CollectorRegistry();
+    static CollectorRegistry registry = new CollectorRegistry();
 
     private static void buildMetrics() {
 
@@ -22,6 +22,7 @@ class MetricExporter {
                 .labelNames("name", "age")
                 .register(registry);
         counter.labels("Jim", "21").inc(10);
+        counter.labels("Hindu", "22").inc(12);
 
         Gauge gauge = Gauge.build()
                 .name("test_gauge")
@@ -37,7 +38,9 @@ class MetricExporter {
                 .labelNames("name", "age")
                 .buckets(2, 4, 6, 8)
                 .register(registry);
-        histogram.labels("Jim", "21").observe(10);
+        histogram.labels("Jim", "21").observe(5);
+        histogram.labels("Jack", "23").observe(4);
+        histogram.labels("Hindu", "15").observe(3);
 
         Summary summary = Summary.build()
                 .name("test_summary")
@@ -50,21 +53,20 @@ class MetricExporter {
                 .register(registry);
         summary.labels("Jim", "21").observe(5);
         summary.labels("Jack", "23").observe(4);
+        summary.labels("Hindu", "15").observe(3);
 
     }
 
 
-    static Map<String, String> export() {
+    public static Map<String, String> export() {
 
         Map<String, String> groupingKey = new HashMap<>();
         groupingKey.put("key1", "value1");
         groupingKey.put("key2", "value2");
         try {
             PushGateway PG = new PushGateway("localhost:9091");
-
-            //HTTPServer server = new HTTPServer(9080);
             buildMetrics();
-            PG.pushAdd(registry, "TestJob", groupingKey);
+            PG.push(registry, "TestJob", groupingKey);
             System.out.println("metric created successfully");
         } catch (IOException e) {
             System.out.println(e.getMessage());

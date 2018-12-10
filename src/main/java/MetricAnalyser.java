@@ -1,3 +1,6 @@
+import com.google.common.collect.MapDifference;
+import com.google.common.collect.Maps;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -5,11 +8,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 class MetricAnalyser {
 
@@ -19,35 +21,31 @@ class MetricAnalyser {
     private String metricInstance;
     private MetricType metricType;
     private Map<String, String> metricGroupingKey;
-    private Map<String, String> metricLabels = new HashMap<>();
-    private Double metricValue;
-    private Double count;
-    private Double sum;
-    private Map<String, Double> quantiles = new HashMap<>();
-    private Map<String, Double> buckets = new HashMap<>();
+    private List<Map<String, Object>> metricMaps = new ArrayList<>();
 
-    private Map<String, Object> generateMap() {
-        Map<String, Object> metricMap = new HashMap<>();
-        metricMap.put("Name", this.metricName);
+    private Map<String, Object> generateMap(Map<String, String> metricLabels, Double metricValue, Double count,
+                                            Double sum, Map<String, Double> quantiles, Map<String, Double> buckets) {
+        Map<String, Object> metricMap = new LinkedHashMap<>();
+        metricMap.put("MetricName", this.metricName );
         metricMap.put("Job", this.metricJob);
         metricMap.put("Instance", this.metricInstance);
-        metricMap.putAll(this.metricLabels);
+        metricMap.putAll(metricLabels);
         switch (metricType) {
             case COUNTER:
             case GAUGE: {
-                metricMap.put("Value", this.metricValue);
+                metricMap.put("Value", metricValue);
                 break;
             }
             case HISTOGRAM: {
-                metricMap.put("Count", this.count);
-                metricMap.put("Sum", this.sum);
-                metricMap.putAll(this.buckets);
+                metricMap.put("Count", count);
+                metricMap.put("Sum", sum);
+                metricMap.putAll(buckets);
                 break;
             }
             case SUMMARY: {
-                metricMap.put("Count", this.count);
-                metricMap.put("Sum", this.sum);
-                metricMap.putAll(this.quantiles);
+                metricMap.put("Count", count);
+                metricMap.put("Sum", sum);
+                metricMap.putAll(quantiles);
                 break;
             }
             default: //default will never be executed
@@ -55,48 +53,87 @@ class MetricAnalyser {
         return metricMap;
     }
 
+
     void setMetricProperties(String job, String instance, Map<String, String> groupingKey) {
         this.metricJob = job;
         this.metricInstance = instance;
         this.metricGroupingKey = groupingKey;
     }
 
-    private void analyseMetrics(String metricSample) {
+    private void analyseMetrics(List<String> metricSamples) {
 
-        String sampleName = metricSample.substring(0,metricSample.indexOf("{"));
-        Double value = Double.parseDouble(metricSample.substring(metricSample.indexOf("}") + 1));
-        Map<String, String> labelPairMap = filterMetric(metricSample);
-        labelPairMap.remove("job");
-        labelPairMap.remove("instance");
-        for (Map.Entry<String, String> entry : metricGroupingKey.entrySet()) {
-           labelPairMap.remove(entry.getKey());
-        }
-        if(sampleName.equals(metricName + "_sum")){
-            this.sum = value;
-        } else if(sampleName.equals(metricName + "_count")) {
-            this.count = value;
-        } else if(metricType.equals(MetricType.HISTOGRAM)){
-            if(labelPairMap.containsKey("le")) {
-                this.buckets.put("bucket_" + labelPairMap.get("le"),value);
-                labelPairMap.remove("le");
+        Map<String, String> labelValues = new LinkedHashMap<>();
+        labelValues = setIdealSample(metricSamples.get(0));
+        Map<String, String> metricLabels = new LinkedHashMap<>();
+        Double metricValue = 0.0;
+        Double count = 0.0;
+        Double sum = 0.0;
+        Map<String, Double> quantiles = new LinkedHashMap<>();
+        Map<String, Double> buckets = new LinkedHashMap<>();
+        for (String sample : metricSamples) {
+            String sampleName = sample.substring(0, sample.indexOf("{"));
+            Double value = Double.parseDouble(sample.substring(sample.indexOf("}") + 1));
+            Map<String, String> labelPairMap = filterMetric(sample);
+            labelPairMap.remove("job");
+            labelPairMap.remove("instance");
+            if (metricGroupingKey != null) {
+                for (Map.Entry<String, String> entry : metricGroupingKey.entrySet()) {
+                    labelPairMap.remove(entry.getKey());
+                }
             }
-        } else if(metricType.equals(MetricType.SUMMARY)){
-            if(labelPairMap.containsKey("quantile")) {
-                this.quantiles.put("quantile_" + labelPairMap.get("quantile"),value);
+            MapDifference<String, String> mapDifference = Maps.difference(labelValues, labelPairMap);
+            Map<String, MapDifference.ValueDifference<String>> valueDifferenceMap = mapDifference
+                    .entriesDiffering();
+            if (valueDifferenceMap.size() != 0) {
+                if(valueDifferenceMap.containsKey("quantile") || valueDifferenceMap.containsKey("le")){
+                    valueDifferenceMap.remove("quantile");
+                    valueDifferenceMap.remove("le");
+                }
+            }
+            if (!valueDifferenceMap.isEmpty()) {
+                metricMaps.add(generateMap(metricLabels, metricValue, count, sum, quantiles, buckets));
+                labelValues = setIdealSample(sample);
+            }
+
+            if (labelPairMap.containsKey("quantile")) {
+                quantiles.put("quantile_" + labelPairMap.get("quantile"), value);
                 labelPairMap.remove("quantile");
+            } else if (labelPairMap.containsKey("le")) {
+                buckets.put("bucket_" + labelPairMap.get("le"), value);
+                labelPairMap.remove("le");
+            } else {
+                metricValue = value;
             }
-        } else {
-            this.metricValue = value;
-        }
-        if (!this.metricLabels.equals(labelPairMap)) {
-            this.metricLabels.putAll(labelPairMap);
+            if (sampleName.equals(metricName + "_sum")) {
+                    sum = value;
+            } else if (sampleName.equals(metricName + "_count")) {
+                    count = value;
+            }
+            metricLabels.putAll(labelPairMap);
+            if (metricSamples.indexOf(sample) == metricSamples.size() -1) {
+                metricMaps.add(generateMap(metricLabels, metricValue, count, sum, quantiles, buckets));
+            }
         }
     }
 
-    Map<String, Object> getMetricMap(URL url, MetricType metricType, String metricName, String help) {
+    private Map<String, String> setIdealSample(String sample) {
+        Map<String, String> idealSample = filterMetric(sample);
+        idealSample.remove("job");
+        idealSample.remove("instance");
+        if (metricGroupingKey != null) {
+            for (Map.Entry<String, String> entry : metricGroupingKey.entrySet()) {
+                idealSample.remove(entry.getKey());
+            }
+        }
+        idealSample.remove("quantile");
+        idealSample.remove("le");
+        return idealSample;
+    }
+
+    void getMetricMap(URL url, MetricType metricType, String metricName, String help) {
         requestMetric(url);
         retrieveMetric(metricType, metricName, help);
-        return generateMap();
+        System.out.println(metricMaps);
     }
 
     private void retrieveMetric(MetricType metricType, String metricName, String help) {
@@ -111,53 +148,58 @@ class MetricAnalyser {
         if (index == -1){
                 throw new RuntimeException("Metric cannot be found");
         }
-        Stream<String> metrics = validateMetric(index);
-        metrics.forEach(this :: analyseMetrics);
+        List<String> metrics = validateMetric(index);
+        analyseMetrics(metrics);
     }
 
-    private Stream<String> validateMetric(Integer index) {
+    private List<String> validateMetric(Integer index) {
         List<String> requiredMetrics = new ArrayList<>();
+        List<List<String>> mapMetricsList = new ArrayList<>();
         boolean metricIdentifier = false;
         List<String> retrievedMetrics = metricResponse.stream().filter(response -> response.startsWith(metricName))
                 .collect(Collectors.toList());
         if (metricResponse.get(index + 1).contains("# TYPE " + metricName + " " +
                     MetricType.getMetricTypeString(metricType))) {
-            for (String singleMetric : retrievedMetrics) {
-                Map<String, String> labelPairMap = filterMetric(singleMetric);
-                if (!(metricJob.equals(""))) {
-                    metricIdentifier = labelPairMap.get("job").equalsIgnoreCase(metricJob);
-                }
-                if (!(metricInstance.equals(""))) {
-                    metricIdentifier = labelPairMap.get("instance").equalsIgnoreCase(metricInstance);
-                }
-                if (metricGroupingKey != null) {
-                    for (Map.Entry<String, String> entry : metricGroupingKey.entrySet()) {
-                        String value = labelPairMap.get(entry.getKey());
-                        if(value != null){
-                            metricIdentifier = value.equalsIgnoreCase(entry.getValue());
-                        } else {
-                            //if the grouping key not found in the metric,
-                            metricIdentifier = false;
-                            break;
-                        }
-                        if (!metricIdentifier) {
-                            //if the grouping key value is not matching,
-                            break;
+            if(!(metricJob.equals("") && metricInstance.equals("") && metricGroupingKey == null) ) {
+                for (String singleSample : retrievedMetrics) {
+                    Map<String, String> labelPairMap = filterMetric(singleSample);
+                    if (!(metricJob.equals(""))) {
+                        metricIdentifier = labelPairMap.get("job").equalsIgnoreCase(metricJob);
+                    }
+                    if (!(metricInstance.equals(""))) {
+                        metricIdentifier = labelPairMap.get("instance").equalsIgnoreCase(metricInstance);
+                    }
+                    if (metricGroupingKey != null) {
+                        for (Map.Entry<String, String> entry : metricGroupingKey.entrySet()) {
+                            String value = labelPairMap.get(entry.getKey());
+                            if (value != null) {
+                                metricIdentifier = value.equalsIgnoreCase(entry.getValue());
+                            } else {
+                                //if the grouping key not found in the metric,
+                                metricIdentifier = false;
+                                break;
+                            }
+                            if (!metricIdentifier) {
+                                //if the grouping key value is not matching,
+                                break;
+                            }
                         }
                     }
+                    if (metricIdentifier) {
+                        requiredMetrics.add(singleSample);
+                    }
                 }
-                if (metricIdentifier) {
-                    requiredMetrics.add(singleMetric);
-                }
+            } else {
+                requiredMetrics = retrievedMetrics;
             }
-        }
-        return requiredMetrics.stream();
+            }
+        return requiredMetrics;
     }
 
     private Map<String, String> filterMetric(String metricSample) {
         String[] labelList = metricSample.substring(metricSample.indexOf("{") +1, metricSample.indexOf("}"))
                 .split(",");
-        Map<String, String> labelMap = new HashMap<>();
+        Map<String, String> labelMap = new LinkedHashMap<>();
         Arrays.stream(labelList).forEach(labelEntry -> {
             String[] entry = labelEntry.split("=");
             if (entry.length == 2) {
