@@ -62,7 +62,7 @@ class MetricAnalyser {
 
     private void analyseMetrics(List<String> metricSamples) {
 
-        Map<String, String> labelValues = new LinkedHashMap<>();
+        Map<String, String> labelValues;
         labelValues = setIdealSample(metricSamples.get(0));
         Map<String, String> metricLabels = new LinkedHashMap<>();
         Double metricValue = 0.0;
@@ -154,7 +154,6 @@ class MetricAnalyser {
 
     private List<String> validateMetric(Integer index) {
         List<String> requiredMetrics = new ArrayList<>();
-        List<List<String>> mapMetricsList = new ArrayList<>();
         boolean metricIdentifier = false;
         List<String> retrievedMetrics = metricResponse.stream().filter(response -> response.startsWith(metricName))
                 .collect(Collectors.toList());

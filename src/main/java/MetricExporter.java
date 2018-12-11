@@ -11,7 +11,7 @@ import java.util.Map;
 
 class MetricExporter {
 
-    static CollectorRegistry registry = new CollectorRegistry();
+    private static CollectorRegistry registry = new CollectorRegistry();
 
     private static void buildMetrics() {
 
@@ -58,7 +58,7 @@ class MetricExporter {
     }
 
 
-    public static Map<String, String> export() {
+    static Map<String, String> export() {
 
         Map<String, String> groupingKey = new HashMap<>();
         groupingKey.put("key1", "value1");
