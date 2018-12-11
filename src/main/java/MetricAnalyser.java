@@ -130,10 +130,10 @@ class MetricAnalyser {
         return idealSample;
     }
 
-    void getMetricMap(URL url, MetricType metricType, String metricName, String help) {
+    List<Map<String, Object>> getMetricMaps(URL url, MetricType metricType, String metricName, String help) {
         requestMetric(url);
         retrieveMetric(metricType, metricName, help);
-        System.out.println(metricMaps);
+        return metricMaps;
     }
 
     private void retrieveMetric(MetricType metricType, String metricName, String help) {
