@@ -1,5 +1,8 @@
 import java.util.Locale;
 
+/**
+ * This specifies the metric types that are supported by Prometheus
+ */
 public enum MetricType {
 
     COUNTER,

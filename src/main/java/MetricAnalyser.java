@@ -13,6 +13,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * This class analyses the response from http server, filter the metrics and generate maps according to
+ * metric label-values.
+ */
 class MetricAnalyser {
 
     private List<String> metricResponse = new ArrayList<>();
@@ -22,6 +26,7 @@ class MetricAnalyser {
     private MetricType metricType;
     private Map<String, String> metricGroupingKey;
     private List<Map<String, Object>> metricMaps = new ArrayList<>();
+
 
     private Map<String, Object> generateMap(Map<String, String> metricLabels, Double metricValue, Double count,
                                             Double sum, Map<String, Double> quantiles, Map<String, Double> buckets) {
@@ -60,6 +65,9 @@ class MetricAnalyser {
         this.metricGroupingKey = groupingKey;
     }
 
+    /**
+     * filter metrics into maps using label values
+     */
     private void analyseMetrics(List<String> metricSamples) {
 
         Map<String, String> labelValues;
@@ -116,6 +124,11 @@ class MetricAnalyser {
         }
     }
 
+    /**
+     * Set sample label values to identify metric value changes.
+     * @param sample A single sample form the Prometheus response
+     * @return return a label -> value map of the sample
+     */
     private Map<String, String> setIdealSample(String sample) {
         Map<String, String> idealSample = filterMetric(sample);
         idealSample.remove("job");
@@ -136,6 +149,9 @@ class MetricAnalyser {
         return metricMaps;
     }
 
+    /**
+     *  filter metrics using metric name and help strings
+     */
     private void retrieveMetric(MetricType metricType, String metricName, String help) {
         this.metricName = metricName;
         this.metricType = metricType;
@@ -152,6 +168,11 @@ class MetricAnalyser {
         analyseMetrics(metrics);
     }
 
+    /**
+     * filter metrics using metric type, job, instance and grouping key values.
+     * @param index index of the required metric from response
+     * @return return filtered metrics in a String list
+     */
     private List<String> validateMetric(Integer index) {
         List<String> requiredMetrics = new ArrayList<>();
         boolean metricIdentifier = false;
@@ -212,6 +233,9 @@ class MetricAnalyser {
         return labelMap;
     }
 
+    /**
+     * request metrics from the http server at the URL
+     */
     private void requestMetric(URL url) {
         try {
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();

@@ -9,6 +9,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * This class creates some Prometheus metrics and export them through Prometheus Pushgateway at the URL
+ **/
 class MetricExporter {
 
     private static CollectorRegistry registry = new CollectorRegistry();
@@ -22,7 +25,7 @@ class MetricExporter {
                 .labelNames("name", "age")
                 .register(registry);
         counter.labels("Jim", "21").inc(10);
-        counter.labels("Hindu", "22").inc(12);
+        counter.labels("John", "22").inc(12);
 
         Gauge gauge = Gauge.build()
                 .name("test_gauge")
@@ -40,7 +43,7 @@ class MetricExporter {
                 .register(registry);
         histogram.labels("Jim", "21").observe(5);
         histogram.labels("Jack", "23").observe(4);
-        histogram.labels("Hindu", "15").observe(3);
+        histogram.labels("John", "15").observe(3);
 
         Summary summary = Summary.build()
                 .name("test_summary")
@@ -53,7 +56,7 @@ class MetricExporter {
                 .register(registry);
         summary.labels("Jim", "21").observe(5);
         summary.labels("Jack", "23").observe(4);
-        summary.labels("Hindu", "15").observe(3);
+        summary.labels("John", "15").observe(3);
 
     }
 
